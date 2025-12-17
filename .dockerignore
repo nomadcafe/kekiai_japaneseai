@@ -1,0 +1,47 @@
+__pycache__
+*.pyc
+.DS_Store
+.git
+.gitignore
+
+# 環境変数ファイル（機密情報を含む）
+.env
+.env.local
+.env.*.local
+
+# 機密情報を含む可能性のあるファイル
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*secret*
+*credential*
+*password*
+
+# AWS設定ファイル（機密情報を含む）
+acm-validation-records.json
+bucket-policy.json
+cloudfront-config*.json
+route53-record.json
+*.aws
+
+# 生成されたファイル（大きなファイル）
+output/*.mp4
+audio/*.wav
+slides/*.png
+uploads/*.pdf
+data/*.json
+
+# 一時ファイル
+temp/
+*.log
+*.tmp
+
+# IDE設定
+.vscode/
+.idea/
+
+# テストファイル
+test_*.py
+*_test.py

@@ -1,0 +1,81 @@
+services:
+  # VOICEVOX エンジン
+  voicevox:
+    image: voicevox/voicevox_engine:cpu-ubuntu20.04-latest
+    ports:
+      - "50021:50021"
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          cpus: '3'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 2G
+
+  # FastAPI アプリケーション
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8005:8000"
+    environment:
+      - VOICEVOX_URL=http://voicevox:50021
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/app/uploads
+      - ./output:/app/output
+      - ./slides:/app/slides
+      - ./audio:/app/audio
+      - ./data:/app/data
+      - ./api:/app/api
+      - ./src:/app/src
+      - ./.env:/app/.env
+      - ./.env.example:/app/.env.example
+    depends_on:
+      - voicevox
+    networks:
+      - app-network
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload --limit-max-requests 1000 --limit-concurrency 100 --timeout-keep-alive 30
+    deploy:
+      resources:
+        limits:
+          cpus: '6'
+          memory: 12G
+        reservations:
+          cpus: '4'
+          memory: 8G
+
+  # Svelte フロントエンド
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=http://localhost:8005
+      - INTERNAL_API_URL=http://api:8000
+      - ORIGIN=http://localhost:3000
+    depends_on:
+      - api
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+networks:
+  app-network:
+    driver: bridge
