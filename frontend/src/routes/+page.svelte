@@ -2,7 +2,7 @@
   import { onMount, tick } from "svelte";
   import { goto } from "$app/navigation";
   import { authenticatedFetch, getApiKey, getDefaultProvider } from "$lib/auth.ts";
-  import { t } from "$lib/i18n";
+  import { t } from "$lib/i18n/index.js";
   // getApiUrl は削除されました - 直接URLパスを使用
 
   interface Job {
