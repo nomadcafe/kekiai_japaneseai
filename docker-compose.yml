@@ -45,10 +45,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '6'
+          cpus: '4'
           memory: 12G
         reservations:
-          cpus: '4'
+          cpus: '2'
           memory: 8G
 
   # Svelte フロントエンド
