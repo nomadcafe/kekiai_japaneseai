@@ -945,7 +945,8 @@ async def generate_video_complete(
     
     job = jobs_db[job_id]
     
-    if job.status not in ["pending", "slides_ready", "dialogue_ready"]:
+    # 失敗状態からの再試行も許可する（ジョブ自体が存在していればOK）
+    if job.status not in ["pending", "slides_ready", "dialogue_ready", "failed"]:
         raise HTTPException(
             status_code=400, 
             detail="ジョブが適切な状態ではありません"
@@ -958,9 +959,10 @@ async def generate_video_complete(
             detail="このジョブは既に処理中です"
         )
     
-    # ステータス更新
+    # ステータス更新（エラー状態をリセットして再試行を開始）
     job.status = "processing"
     job.status_code = StatusCode.PROCESSING
+    job.error_code = None
     job.progress = 5
     job.updated_at = datetime.now()
     

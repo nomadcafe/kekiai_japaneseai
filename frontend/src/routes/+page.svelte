@@ -484,6 +484,11 @@
 
   async function startVideoGeneration(jobId: string) {
     try {
+      // 既存のエラー表示をクリア
+      if (currentJob) {
+        currentJob.error = "";
+      }
+
       // 編集中の場合は先に編集を終了
       if (editingDialogue) {
         editingDialogue = false;
@@ -1416,6 +1421,17 @@
         
         {#if currentJob.error}
           <div class="error">❌ {currentJob.error}</div>
+        {/if}
+
+        {#if currentJob.status === "failed"}
+          <div class="action-buttons">
+            <button
+              class="primary-btn"
+              on:click={() => startVideoGeneration(currentJob.job_id)}
+            >
+              🔁 動画生成を再試行
+            </button>
+          </div>
         {/if}
 
         {#if currentJob.status === "completed" && currentJob.result_url}
