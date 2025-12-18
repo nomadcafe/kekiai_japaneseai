@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { getApiKey, setApiKey, removeApiKey, getDefaultProvider, setDefaultProvider } from '$lib/auth';
+	import { getApiKey, setApiKey, removeApiKey, getDefaultProvider, setDefaultProvider } from '$lib/auth.ts';
 
 	interface Provider {
 		id: string;
