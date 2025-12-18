@@ -179,39 +179,61 @@ async def delete_job(job_id: str):
 
 
 # バックグラウンドタスク関数（main.pyから移動予定）
-async def convert_pdf_to_slides(job_id: str, pdf_path: str, target_duration: int = 10, metadata: dict = None, api_key: str = None, provider: str = None):
+async def convert_pdf_to_slides(
+    job_id: str,
+    pdf_path: str,
+    target_duration: int = 10,
+    metadata: dict = None,
+    api_key: str = None,
+    provider: str = None,
+):
     """PDFをスライド画像に変換"""
-    from api.core.pdf_processor import PDFProcessor
-    
+    try:
+        # ここでの import 失敗もジョブ失敗として扱う（ステータスがずっと pending にならないように）
+        from api.core.pdf_processor import PDFProcessor  # type: ignore
+    except Exception as e:
+        import traceback
+
+        error_msg = f"PDFProcessor import error: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        job = jobs_db.get(job_id)
+        if job:
+            job.status = "failed"
+            job.status_code = StatusCode.FAILED
+            job.error_code = StatusCode.PDF_PROCESSING_ERROR
+            job.updated_at = datetime.now()
+        return
+
     try:
         job = jobs_db[job_id]
         job.progress = 10
         job.status_code = StatusCode.PDF_PROCESSING
-        
+        job.updated_at = datetime.now()
+
         # PDFをスライドに変換
         processor = PDFProcessor(job_id, Path.cwd())
         slide_count = processor.convert_pdf_to_slides(pdf_path)
-        
+
         job.progress = 15
         job.updated_at = datetime.now()
-        
+
         # 進捗更新用のコールバック
         def update_progress(message: str, progress: float):
             job.progress = 15 + int(progress * 0.8)
             job.updated_at = datetime.now()
-        
+
         # メタデータがある場合はスピーカー情報と会話スタイル、ナレッジを取得
         speaker_info = None
         conversation_style_prompt = None
         additional_knowledge = None
         if metadata:
             speaker_info = {
-                'speaker1': metadata.get('speaker1'),
-                'speaker2': metadata.get('speaker2')
+                "speaker1": metadata.get("speaker1"),
+                "speaker2": metadata.get("speaker2"),
             }
-            conversation_style_prompt = metadata.get('conversation_style_prompt', '')
-            additional_knowledge = metadata.get('additional_knowledge', '')
-        
+            conversation_style_prompt = metadata.get("conversation_style_prompt", "")
+            additional_knowledge = metadata.get("additional_knowledge", "")
+
         # プロンプトを結合
         combined_prompt = conversation_style_prompt
         if additional_knowledge:
@@ -219,38 +241,40 @@ async def convert_pdf_to_slides(job_id: str, pdf_path: str, target_duration: int
                 combined_prompt = f"{combined_prompt}\n\n{additional_knowledge}"
             else:
                 combined_prompt = additional_knowledge
-        
+
         # 対話データを生成（APIキーを渡す）
         job.status_code = StatusCode.DIALOGUE_GENERATING
         # メタデータからAPIキーとプロバイダーを取得
         api_key_to_use = api_key or (metadata.get("api_key") if metadata else None)
         provider_to_use = provider or (metadata.get("provider") if metadata else None)
         dialogue_path = await processor.generate_dialogue_from_pdf(
-            pdf_path, 
+            pdf_path,
             additional_prompt=combined_prompt,
-            progress_callback=update_progress, 
+            progress_callback=update_progress,
             target_duration=target_duration,
             speaker_info=speaker_info,
             additional_knowledge=additional_knowledge,
             api_key=api_key_to_use,
-            provider=provider_to_use
+            provider=provider_to_use,
         )
-        
+
         # スライドと対話スクリプトの準備完了
         job.status = "slides_ready"
         job.status_code = StatusCode.DIALOGUE_COMPLETED
         job.progress = 50
         job.updated_at = datetime.now()
-        
+
     except Exception as e:
         import traceback
-        error_msg = f"{str(e)}\n{traceback.format_exc()}"
-        print(f"Error in convert_pdf_to_slides: {error_msg}")
-        job = jobs_db[job_id]
-        job.status = "failed"
-        job.status_code = StatusCode.FAILED
-        job.error_code = StatusCode.PDF_PROCESSING_ERROR
-        job.updated_at = datetime.now()
+
+        error_msg = f"Error in convert_pdf_to_slides: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        job = jobs_db.get(job_id)
+        if job:
+            job.status = "failed"
+            job.status_code = StatusCode.FAILED
+            job.error_code = StatusCode.PDF_PROCESSING_ERROR
+            job.updated_at = datetime.now()
 
 
 async def generate_complete_video(job_id: str):
