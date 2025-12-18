@@ -224,13 +224,11 @@ async def convert_pdf_to_slides(job_id: str, pdf_path: str, target_duration: int
             provider=provider_to_use
         )
         
+        # スライドと対話スクリプトの準備完了
         job.status = "slides_ready"
         job.status_code = StatusCode.DIALOGUE_COMPLETED
         job.progress = 50
         job.updated_at = datetime.now()
-        
-        # 音声と動画生成を続ける
-        await generate_complete_video(job_id)
         
     except Exception as e:
         import traceback

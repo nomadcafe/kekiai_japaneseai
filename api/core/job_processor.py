@@ -204,22 +204,16 @@ class JobProcessor:
             
             pdf_path = str(pdf_files[0])
             
-            # 2. PDF処理（非同期）
+            # 2. PDF処理（非同期）※スライドが既にある場合でも安全のため再実行
             await async_worker.submit_task(
                 f"pdf_{job_id}",
                 JobProcessor.process_pdf_sync,
                 job_id, pdf_path, jobs_db
             )
             await async_worker.wait_for_task(f"pdf_{job_id}")
-            
-            # 3. 対話生成（非同期）
-            await async_worker.submit_task(
-                f"dialogue_{job_id}",
-                JobProcessor.generate_dialogue_sync,
-                job_id, additional_prompt, jobs_db
-            )
-            await async_worker.wait_for_task(f"dialogue_{job_id}")
-            
+
+            # 3. 対話データはアップロード時または編集画面で既に生成済みとみなし、
+            #    ここでは音声生成と動画作成のみを行う
             # 4. 音声生成（非同期）
             await async_worker.submit_task(
                 f"audio_{job_id}",
