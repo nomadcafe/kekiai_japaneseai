@@ -340,6 +340,15 @@
       return;
     }
 
+    // APIキーをチェック（localStorageから取得）
+    const defaultProvider = getDefaultProvider() || "openai";
+    const apiKey = getApiKey(defaultProvider);
+    if (!apiKey) {
+      alert("⚠️ LLMプロバイダーのAPIキーが設定されていません。\n設定画面からAPIキーを設定してください。");
+      goto("/settings");
+      return;
+    }
+
     console.log("Uploading file:", selectedFile.name, selectedFile.type, selectedFile.size);
     
     isUploading = true;
@@ -385,12 +394,8 @@
       }
       
       // APIキーを追加（localStorageから取得）
-      const defaultProvider = getDefaultProvider() || "openai";
-      const apiKey = getApiKey(defaultProvider);
-      if (apiKey) {
-        formData.append("api_key", apiKey);
-        formData.append("provider", defaultProvider);
-      }
+      formData.append("api_key", apiKey);
+      formData.append("provider", defaultProvider);
 
       console.log("Sending upload request...");
       const response = await fetch("/api/jobs/upload", {
