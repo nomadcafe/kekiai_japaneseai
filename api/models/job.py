@@ -54,3 +54,9 @@ class UpdateDialogueRequest(BaseModel):
     job_id: str
     dialogue_data: dict[str, list[dict]]  # 編集された対話データ
 
+
+class SlideImportanceRequest(BaseModel):
+    """スライド重要度設定リクエスト"""
+    job_id: str
+    importance_map: dict[int, float]  # スライド番号 -> 重要度 (0.5-1.5)
+

@@ -68,6 +68,8 @@
   let knowledgeExpanded = false; // ナレッジ入力欄の展開状態
   let knowledgeFile: File | null = null; // ナレッジファイル
   let showIntro = false; // 紹介セクションの表示状態（landing pageがあるため非表示）
+  let slideImportance: Record<number, number> = {}; // スライド重要度マップ（スライド番号 -> 重要度 0.5-1.5）
+  let isSavingImportance = false; // 重要度保存中フラグ
 
   // ステータス表示用のヘルパー関数
   function getDisplayStatus(job: Job): string {
@@ -584,6 +586,19 @@
       // メタデータも取得
       await loadJobMetadata(jobId);
 
+      // 重要度設定も取得（対話データ読み込み後に実行）
+      // 重要度が設定されていない場合は、デフォルト値（1.0）を設定
+      if (dialogueData) {
+        // まずデフォルト値を設定
+        slideImportance = {};
+        for (const slideKey of Object.keys(dialogueData)) {
+          const slideNum = parseInt(slideKey.split("_")[1]);
+          slideImportance[slideNum] = 1.0;
+        }
+        // サーバーから取得した重要度で上書き
+        await loadSlideImportance(jobId);
+      }
+
       currentStep = "dialogue";
       console.log("currentStep更新:", currentStep);
 
@@ -617,6 +632,124 @@
     } catch (error) {
       console.error("メタデータ取得エラー:", error);
     }
+  }
+
+  async function loadSlideImportance(jobId: string) {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/slide-importance`);
+      if (response.ok) {
+        const importanceData = await response.json();
+        // サーバーから取得した重要度で上書き（既存のデフォルト値を保持）
+        for (const [key, value] of Object.entries(importanceData)) {
+          const slideNum = parseInt(key);
+          slideImportance[slideNum] = value as number;
+        }
+        console.log("重要度設定取得成功:", slideImportance);
+      } else {
+        // 重要度が設定されていない場合は既に設定されたデフォルト値（1.0）を使用
+        console.log("重要度設定なし、デフォルト値を使用");
+      }
+    } catch (error) {
+      console.error("重要度設定取得エラー:", error);
+      // エラー時は既に設定されたデフォルト値を使用
+    }
+  }
+
+  async function saveSlideImportance(jobId: string) {
+    if (!currentJob) return;
+    
+    try {
+      isSavingImportance = true;
+      const response = await fetch(`/api/jobs/${jobId}/slide-importance`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          job_id: jobId,
+          importance_map: slideImportance,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "重要度設定の保存に失敗しました");
+      }
+
+      const result = await response.json();
+      console.log("重要度設定保存成功:", result);
+      
+      // 重要度が変更されたので、対話を再生成する必要があることをユーザーに通知
+      // （オプション：自動再生成も可能）
+    } catch (error) {
+      console.error("重要度設定保存エラー:", error);
+      alert(error.message || "重要度設定の保存に失敗しました");
+    } finally {
+      isSavingImportance = false;
+    }
+  }
+
+  // 重要度変更時に自動保存（デバウンス付き）
+  let saveImportanceTimeout: ReturnType<typeof setTimeout> | null = null;
+  function onImportanceChange(jobId: string) {
+    if (saveImportanceTimeout) {
+      clearTimeout(saveImportanceTimeout);
+    }
+    saveImportanceTimeout = setTimeout(() => {
+      saveSlideImportance(jobId);
+    }, 1000); // 1秒後に自動保存
+  }
+
+  // 重要度に基づいて各スライドの推定時間を計算
+  function calculateSlideDuration(slideNum: number): number {
+    if (!dialogueData) return 0;
+    
+    const slideKey = `slide_${slideNum}`;
+    const dialogues = dialogueData[slideKey] || [];
+    
+    // 文字数を計算
+    let totalChars = 0;
+    for (const dialogue of dialogues) {
+      totalChars += dialogue.text.length;
+    }
+    
+    // 読み上げ速度（文字/秒）
+    const charsPerSecond = 5.5; // 330文字/分 ÷ 60秒
+    
+    // 基本時間
+    const baseDuration = totalChars / charsPerSecond;
+    
+    // 重要度を適用
+    const importance = slideImportance[slideNum] || 1.0;
+    const adjustedDuration = baseDuration * importance;
+    
+    // 対話間の間隔を追加（0.3秒 × 対話数）
+    const pauseTime = dialogues.length * 0.3;
+    
+    return adjustedDuration + pauseTime;
+  }
+
+  // 総時間を計算
+  function calculateTotalDuration(): number {
+    if (!dialogueData) return 0;
+    
+    let total = 0;
+    for (const slideKey of Object.keys(dialogueData)) {
+      const slideNum = parseInt(slideKey.split("_")[1]);
+      total += calculateSlideDuration(slideNum);
+    }
+    
+    // スライド間の間隔を追加（0.5秒 × スライド数）
+    const slideCount = Object.keys(dialogueData).length;
+    total += slideCount * 0.5;
+    
+    return total;
+  }
+
+  function formatDuration(seconds: number): string {
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}分${secs}秒`;
   }
 
   async function updateDialogue(jobId: string) {
@@ -752,6 +885,7 @@
     isRegenerating = false;
     showHistoryForSlide = null;
     targetDuration = 10; // デフォルトに戻す
+    slideImportance = {}; // 重要度設定をリセット
   }
 
   function addDialogueItem(slideKey: string) {
@@ -1175,14 +1309,20 @@
     <section class="dialogue-section">
       <h3>📝 対話スクリプト編集</h3>
 
-      {#if estimatedDuration}
-        <div class="duration-estimate">
-          <span class="duration-icon">⏱️</span>
-          <span class="duration-text"
-            >推定動画時間: <strong>{estimatedDuration.formatted}</strong></span
-          >
-        </div>
-      {/if}
+      <div class="duration-estimate">
+        <span class="duration-icon">⏱️</span>
+        <span class="duration-text">
+          推定動画時間: <strong>{formatDuration(calculateTotalDuration())}</strong>
+          {#if currentJobMetadata?.target_duration}
+            <span class="target-duration">
+              (目標: {currentJobMetadata.target_duration}分)
+            </span>
+          {/if}
+        </span>
+        {#if calculateTotalDuration() > (currentJobMetadata?.target_duration || 10) * 60}
+          <span class="duration-warning">⚠️ 目標時間を超過しています</span>
+        {/if}
+      </div>
 
       <div class="dialogue-controls">
         <button
@@ -1334,6 +1474,40 @@
                   📝 履歴 ({slideHistory.length})
                 </button>
               {/if}
+            </div>
+            
+            <!-- 重要度調整UI -->
+            <div class="importance-control">
+              <div class="importance-label">
+                <label for="importance-{slideNum}">重要度:</label>
+                <span class="importance-value">{(slideImportance[slideNum] || 1.0).toFixed(1)}x</span>
+                <span class="importance-duration">
+                  (予定: {formatDuration(calculateSlideDuration(slideNum))})
+                </span>
+              </div>
+              <div class="importance-slider-container">
+                <input
+                  type="range"
+                  id="importance-{slideNum}"
+                  min="0.5"
+                  max="1.5"
+                  step="0.1"
+                  value={slideImportance[slideNum] || 1.0}
+                  on:input={(e) => {
+                    const value = parseFloat(e.currentTarget.value);
+                    slideImportance[slideNum] = value;
+                    if (currentJob) {
+                      onImportanceChange(currentJob.job_id);
+                    }
+                  }}
+                  class="importance-slider"
+                />
+                <div class="importance-labels">
+                  <span class="importance-label-min">0.5x (簡潔)</span>
+                  <span class="importance-label-default">1.0x (標準)</span>
+                  <span class="importance-label-max">1.5x (詳細)</span>
+                </div>
+              </div>
             </div>
             {#if showHistoryForSlide === slideKey}
               <div class="instruction-history">
@@ -1708,6 +1882,122 @@
   .duration-text strong {
     font-weight: 600;
     color: #0c4a6e;
+  }
+
+  .target-duration {
+    color: #6b7280;
+    font-size: 0.9rem;
+    margin-left: 0.5rem;
+  }
+
+  .duration-warning {
+    color: #dc2626;
+    font-size: 0.875rem;
+    margin-left: 0.5rem;
+    font-weight: 500;
+  }
+
+  /* 重要度調整UI */
+  .importance-control {
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .importance-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  .importance-label label {
+    font-weight: 500;
+    color: #374151;
+  }
+
+  .importance-value {
+    font-weight: 600;
+    color: #2563eb;
+    font-size: 1rem;
+  }
+
+  .importance-duration {
+    color: #6b7280;
+    font-size: 0.875rem;
+    margin-left: auto;
+  }
+
+  .importance-slider-container {
+    position: relative;
+  }
+
+  .importance-slider {
+    width: 100%;
+    height: 8px;
+    background: #e5e7eb;
+    border-radius: 4px;
+    outline: none;
+    -webkit-appearance: none;
+    margin-bottom: 0.5rem;
+  }
+
+  .importance-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #2563eb;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .importance-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+    background: #1d4ed8;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .importance-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #2563eb;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .importance-slider::-moz-range-thumb:hover {
+    transform: scale(1.15);
+    background: #1d4ed8;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .importance-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: #6b7280;
+  }
+
+  .importance-label-min {
+    color: #9ca3af;
+  }
+
+  .importance-label-default {
+    color: #2563eb;
+    font-weight: 500;
+  }
+
+  .importance-label-max {
+    color: #059669;
   }
 
   .dialogue-controls {

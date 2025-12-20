@@ -17,7 +17,8 @@ import threading
 
 from api.models.job import (
     JobStatus, JobCreateResponse, GenerateAudioRequest, 
-    CreateVideoRequest, GenerateDialogueRequest, UpdateDialogueRequest
+    CreateVideoRequest, GenerateDialogueRequest, UpdateDialogueRequest,
+    SlideImportanceRequest
 )
 from api.core.status_codes import StatusCode
 from api.core.job_processor import JobProcessor
@@ -956,6 +957,62 @@ async def update_dialogue(
             "formatted": format_duration(total_seconds)
         }
     }
+
+
+@router.put("/{job_id}/slide-importance")
+async def update_slide_importance(
+    job_id: str,
+    request: SlideImportanceRequest
+):
+    """スライド重要度を設定"""
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail="ジョブが見つかりません")
+    
+    # 重要度マップを保存
+    data_dir = Path.cwd() / "data" / job_id
+    data_dir.mkdir(exist_ok=True)
+    
+    importance_path = data_dir / "slide_importance.json"
+    
+    # 重要度を検証（0.5-1.5の範囲）
+    validated_importance = {}
+    for slide_num, importance in request.importance_map.items():
+        if 0.5 <= importance <= 1.5:
+            validated_importance[slide_num] = importance
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"スライド{slide_num}の重要度は0.5〜1.5の範囲で指定してください"
+            )
+    
+    # 重要度を保存
+    with open(importance_path, 'w', encoding='utf-8') as f:
+        json.dump(validated_importance, f, ensure_ascii=False, indent=2)
+    
+    return {
+        "message": "スライド重要度を更新しました",
+        "importance_map": validated_importance
+    }
+
+
+@router.get("/{job_id}/slide-importance")
+async def get_slide_importance(job_id: str):
+    """スライド重要度を取得"""
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail="ジョブが見つかりません")
+    
+    # 重要度ファイルを読み込み
+    data_dir = Path.cwd() / "data" / job_id
+    importance_path = data_dir / "slide_importance.json"
+    
+    if importance_path.exists():
+        with open(importance_path, 'r', encoding='utf-8') as f:
+            importance_map = json.load(f)
+            # キーを整数に変換
+            return {int(k): float(v) for k, v in importance_map.items()}
+    else:
+        # デフォルト値（すべて1.0）
+        return {}
 
 
 @router.post("/{job_id}/generate-video")

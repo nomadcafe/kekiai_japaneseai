@@ -214,15 +214,28 @@ JSON形式で各スライドの重要度係数を返してください。
         
         return base_importance
     
-    async def extract_text_from_slides(self, slide_texts: List[str], additional_prompt: str = None, progress_callback=None, target_duration: int = 10, speaker_info: dict = None, additional_knowledge: str = None) -> Dict[str, List[Dict]]:
+    async def extract_text_from_slides(self, slide_texts: List[str], additional_prompt: str = None, progress_callback=None, target_duration: int = 10, speaker_info: dict = None, additional_knowledge: str = None, user_importance_map: Dict[int, float] = None) -> Dict[str, List[Dict]]:
         """スライドのテキストから対話形式のナレーションを生成（スライドごとに個別生成）"""
         
         dialogue_data = {}
         
-        # まず各スライドの重要度を分析（ユーザー指示も考慮）
-        # 一時的に均等配分でテスト
-        importance_map = {i+1: 1.0 for i in range(len(slide_texts))}
-        # importance_map = await self.analyze_slide_importance(slide_texts, additional_prompt)
+        # 重要度マップの決定：ユーザー設定があればそれを使用、なければAI分析
+        if user_importance_map:
+            # ユーザー設定の重要度を使用
+            importance_map = {}
+            for i in range(len(slide_texts)):
+                slide_num = i + 1
+                # ユーザー設定があればそれを使用、なければ1.0
+                importance_map[slide_num] = user_importance_map.get(slide_num, 1.0)
+            print(f"ユーザー設定の重要度を使用: {importance_map}")
+        else:
+            # AI分析を使用（ユーザー指示も考慮）
+            try:
+                importance_map = await self.analyze_slide_importance(slide_texts, additional_prompt)
+            except Exception as e:
+                print(f"重要度分析エラー、デフォルト値を使用: {e}")
+                # エラー時は均等配分
+                importance_map = {i+1: 1.0 for i in range(len(slide_texts))}
         
         # 重要度の合計を計算
         total_importance = sum(importance_map.get(i+1, 1.0) for i in range(len(slide_texts)))
@@ -289,16 +302,29 @@ JSON形式で各スライドの重要度係数を返してください。
         
         return dialogue_data
     
-    async def regenerate_specific_slides(self, slide_texts: List[str], existing_dialogues: Dict[str, List[Dict]], slide_numbers: List[int], additional_prompt: str = None, progress_callback=None, instruction_history=None, target_duration: int = 10, speaker_info: dict = None, additional_knowledge: str = None) -> Dict[str, List[Dict]]:
+    async def regenerate_specific_slides(self, slide_texts: List[str], existing_dialogues: Dict[str, List[Dict]], slide_numbers: List[int], additional_prompt: str = None, progress_callback=None, instruction_history=None, target_duration: int = 10, speaker_info: dict = None, additional_knowledge: str = None, user_importance_map: Dict[int, float] = None) -> Dict[str, List[Dict]]:
         """特定のスライドのみ再生成"""
         
         # 既存の対話データをコピー
         dialogue_data = existing_dialogues.copy()
         
-        # 各スライドの重要度を分析（ユーザー指示も考慮）
-        # 一時的に均等配分でテスト
-        importance_map = {i+1: 1.0 for i in range(len(slide_texts))}
-        # importance_map = await self.analyze_slide_importance(slide_texts, additional_prompt)
+        # 重要度マップの決定：ユーザー設定があればそれを使用、なければAI分析
+        if user_importance_map:
+            # ユーザー設定の重要度を使用
+            importance_map = {}
+            for i in range(len(slide_texts)):
+                slide_num = i + 1
+                # ユーザー設定があればそれを使用、なければ1.0
+                importance_map[slide_num] = user_importance_map.get(slide_num, 1.0)
+            print(f"ユーザー設定の重要度を使用（再生成）: {importance_map}")
+        else:
+            # AI分析を使用（ユーザー指示も考慮）
+            try:
+                importance_map = await self.analyze_slide_importance(slide_texts, additional_prompt)
+            except Exception as e:
+                print(f"重要度分析エラー、デフォルト値を使用: {e}")
+                # エラー時は均等配分
+                importance_map = {i+1: 1.0 for i in range(len(slide_texts))}
         
         # 重要度の合計を計算
         total_importance = sum(importance_map.get(i+1, 1.0) for i in range(len(slide_texts)))

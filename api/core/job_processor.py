@@ -77,6 +77,20 @@ class JobProcessor:
             extractor = TextExtractor()
             slide_texts = extractor.extract_text_from_pdf(str(pdf_files[0]))
             
+            # ユーザー設定の重要度を読み込み（存在する場合）
+            user_importance_map = None
+            data_dir = Path.cwd() / "data" / job_id
+            importance_path = data_dir / "slide_importance.json"
+            if importance_path.exists():
+                try:
+                    with open(importance_path, 'r', encoding='utf-8') as f:
+                        importance_data = json.load(f)
+                        # キーを整数に変換
+                        user_importance_map = {int(k): float(v) for k, v in importance_data.items()}
+                        logger.info(f"ユーザー設定の重要度を使用（再生成）: {user_importance_map}")
+                except Exception as e:
+                    logger.warning(f"重要度ファイルの読み込みエラー: {e}")
+            
             # 対話生成を実行（APIキーを渡す）
             generator = DialogueGenerator(api_key=api_key, provider=provider)
             
@@ -88,7 +102,8 @@ class JobProcessor:
                     generator.extract_text_from_slides(
                         slide_texts, 
                         additional_prompt=additional_prompt,
-                        target_duration=10  # デフォルト10分
+                        target_duration=10,  # デフォルト10分
+                        user_importance_map=user_importance_map
                     )
                 )
                 

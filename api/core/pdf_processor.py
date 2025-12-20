@@ -32,7 +32,20 @@ class PDFProcessor:
         text_extractor = TextExtractor()
         slide_texts = text_extractor.extract_text_from_pdf(pdf_path)
         
-        # 2. 対話を生成（目安時間とスピーカー情報を渡す、APIキーも渡す）
+        # 2. ユーザー設定の重要度を読み込み（存在する場合）
+        user_importance_map = None
+        importance_path = self.data_dir / "slide_importance.json"
+        if importance_path.exists():
+            try:
+                with open(importance_path, 'r', encoding='utf-8') as f:
+                    importance_data = json.load(f)
+                    # キーを整数に変換
+                    user_importance_map = {int(k): float(v) for k, v in importance_data.items()}
+                    print(f"ユーザー設定の重要度を使用: {user_importance_map}")
+            except Exception as e:
+                print(f"重要度ファイルの読み込みエラー: {e}")
+        
+        # 3. 対話を生成（目安時間とスピーカー情報を渡す、APIキーも渡す）
         dialogue_generator = DialogueGenerator(api_key=api_key, provider=provider)
         dialogue_data = await dialogue_generator.extract_text_from_slides(
             slide_texts, 
@@ -40,7 +53,8 @@ class PDFProcessor:
             progress_callback,
             target_duration,
             speaker_info,
-            additional_knowledge
+            additional_knowledge,
+            user_importance_map=user_importance_map
         )
         
         # 3. 全体調整とカタカナ変換を自動実行（APIキーを渡す）
