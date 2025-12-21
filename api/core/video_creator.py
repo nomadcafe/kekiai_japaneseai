@@ -16,7 +16,15 @@ class VideoCreator:
         self.output_dir = base_dir / "output"
         self.output_dir.mkdir(exist_ok=True)
         
-    def create_video(self, slide_numbers: Optional[List[int]] = None) -> str:
+    def create_video(
+        self, 
+        slide_numbers: Optional[List[int]] = None,
+        bgm_enabled: bool = False,
+        bgm_path: Optional[str] = None,
+        bgm_volume: float = 0.15,
+        transition_type: str = "crossfade",
+        transition_duration: float = 0.4
+    ) -> str:
         """動画を作成"""
         
         # スライド画像のパスを取得
@@ -60,14 +68,41 @@ class VideoCreator:
                     })
                     print(f"  - {audio_file.name}: speaker={speaker}")
         
+        # BGMパスの解決
+        resolved_bgm_path = None
+        if bgm_enabled and bgm_path:
+            # まず指定されたパスを試す
+            bgm_file = Path(bgm_path)
+            if not bgm_file.is_absolute():
+                # 相対パスの場合、BGM素材ディレクトリを探す
+                bgm_lib_dir = self.base_dir / "bgm"
+                bgm_file = bgm_lib_dir / bgm_path
+                if not bgm_file.exists():
+                    # 環境変数からも試す
+                    import os
+                    env_bgm = os.getenv("VIDEO_BGM_PATH")
+                    if env_bgm and Path(env_bgm).exists():
+                        bgm_file = Path(env_bgm)
+            
+            if bgm_file.exists():
+                resolved_bgm_path = str(bgm_file)
+                print(f"BGMファイルを使用: {resolved_bgm_path}")
+            else:
+                print(f"警告: BGMファイルが見つかりません: {bgm_path}")
+        
         # 動画作成
-        creator = DialogueVideoCreator()
+        creator = DialogueVideoCreator(
+            bgm_path=resolved_bgm_path if bgm_enabled else None,
+            bgm_volume=bgm_volume
+        )
         output_path = self.output_dir / f"{self.job_id}.mp4"
         
         creator.create_dialogue_video(
             image_paths,
             dialogue_audio_info,
-            str(output_path)
+            str(output_path),
+            transition_type=transition_type,
+            transition_duration=transition_duration
         )
         
         return str(output_path)

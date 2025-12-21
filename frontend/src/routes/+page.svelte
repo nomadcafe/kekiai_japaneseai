@@ -70,6 +70,13 @@
   let showIntro = false; // 紹介セクションの表示状態（landing pageがあるため非表示）
   let slideImportance: Record<number, number> = {}; // スライド重要度マップ（スライド番号 -> 重要度 0.5-1.5）
   let isSavingImportance = false; // 重要度保存中フラグ
+  // BGMと転場設定
+  let bgmEnabled = false; // BGM有効化
+  let bgmPath = ""; // BGMファイルパス
+  let bgmVolume = 0.15; // BGM音量（0.0-1.0）
+  let transitionType = "crossfade"; // 転場タイプ
+  let transitionDuration = 0.4; // 転場時間（秒）
+  let showVideoSettings = false; // 動画設定パネルの表示状態
 
   // ステータス表示用のヘルパー関数
   function getDisplayStatus(job: Job): string {
@@ -509,11 +516,18 @@
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
+      const formData = new FormData();
+      formData.append("bgm_enabled", bgmEnabled.toString());
+      if (bgmPath) {
+        formData.append("bgm_path", bgmPath);
+      }
+      formData.append("bgm_volume", bgmVolume.toString());
+      formData.append("transition_type", transitionType);
+      formData.append("transition_duration", transitionDuration.toString());
+
       const response = await fetch(`/api/jobs/${jobId}/generate-video`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        body: formData,
       });
 
       if (!response.ok) {
@@ -1370,12 +1384,89 @@
           on:change={handleCSVUpload}
         />
         <button
+          class="settings-toggle-btn"
+          on:click={() => showVideoSettings = !showVideoSettings}
+        >
+          {showVideoSettings ? "⚙️ 動画設定を閉じる" : "⚙️ 動画設定を開く"}
+        </button>
+        <button
           class="generate-btn"
           on:click={() => currentJob && startVideoGeneration(currentJob.job_id)}
         >
           🎥 動画生成開始
         </button>
       </div>
+
+      {#if showVideoSettings}
+        <div class="video-settings-panel">
+          <h4>🎬 動画設定</h4>
+          
+          <!-- BGM設定 -->
+          <div class="setting-group">
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                bind:checked={bgmEnabled}
+              />
+              <span>背景音楽（BGM）を有効にする</span>
+            </label>
+            
+            {#if bgmEnabled}
+              <div class="setting-subgroup">
+                <label for="bgm-path">BGMファイルパス（bgm/ディレクトリからの相対パス）:</label>
+                <input
+                  id="bgm-path"
+                  type="text"
+                  bind:value={bgmPath}
+                  placeholder="例: background_music.mp3"
+                  class="setting-input"
+                />
+                <small class="setting-hint">bgm/ディレクトリ内のファイル名を指定してください</small>
+                
+                <label for="bgm-volume">BGM音量: {(bgmVolume * 100).toFixed(0)}%</label>
+                <input
+                  id="bgm-volume"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  bind:value={bgmVolume}
+                  class="setting-slider"
+                />
+              </div>
+            {/if}
+          </div>
+
+          <!-- 転場効果設定 -->
+          <div class="setting-group">
+            <label for="transition-type">転場効果:</label>
+            <select
+              id="transition-type"
+              bind:value={transitionType}
+              class="setting-select"
+            >
+              <option value="crossfade">クロスフェード（推奨）</option>
+              <option value="fade">フェード</option>
+              <option value="slide">スライド</option>
+              <option value="zoom">ズーム</option>
+              <option value="none">転場なし</option>
+            </select>
+            
+            {#if transitionType !== "none"}
+              <label for="transition-duration">転場時間: {transitionDuration.toFixed(1)}秒</label>
+              <input
+                id="transition-duration"
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.1"
+                bind:value={transitionDuration}
+                class="setting-slider"
+              />
+            {/if}
+          </div>
+        </div>
+      {/if}
 
       <div class="edit-notice">
         <span class="notice-icon">⚠️</span>
@@ -3893,5 +3984,114 @@
     .benefit-text span {
       font-size: 0.9375rem;
     }
+  }
+
+  /* 動画設定パネル */
+  .settings-toggle-btn {
+    background-color: #6b7280;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.3s ease;
+    margin-right: 0.5rem;
+  }
+
+  .settings-toggle-btn:hover {
+    background-color: #4b5563;
+  }
+
+  .video-settings-panel {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .video-settings-panel h4 {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    color: #1f2937;
+    font-size: 1.25rem;
+  }
+
+  .setting-group {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .setting-group:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 1rem;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+  }
+
+  .setting-subgroup {
+    margin-left: 1.5rem;
+    margin-top: 1rem;
+  }
+
+  .setting-subgroup label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #4b5563;
+    font-size: 0.9rem;
+  }
+
+  .setting-input {
+    width: 100%;
+    max-width: 400px;
+    padding: 0.5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .setting-hint {
+    display: block;
+    color: #6b7280;
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+    margin-bottom: 1rem;
+  }
+
+  .setting-slider {
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: 0.5rem;
+  }
+
+  .setting-select {
+    width: 100%;
+    max-width: 400px;
+    padding: 0.5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    background-color: white;
+    cursor: pointer;
   }
 </style>

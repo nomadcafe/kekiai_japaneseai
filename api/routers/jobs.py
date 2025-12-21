@@ -508,7 +508,12 @@ async def create_video(
     background_tasks.add_task(
         create_video_task,
         job_id,
-        request.slide_numbers
+        request.slide_numbers,
+        request.bgm_enabled,
+        request.bgm_path,
+        request.bgm_volume,
+        request.transition_type,
+        request.transition_duration
     )
     
     return {"message": "動画作成を開始しました"}
@@ -1018,7 +1023,12 @@ async def get_slide_importance(job_id: str):
 @router.post("/{job_id}/generate-video")
 async def generate_video_complete(
     job_id: str,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    bgm_enabled: bool = Form(False),
+    bgm_path: Optional[str] = Form(None),
+    bgm_volume: float = Form(0.15),
+    transition_type: str = Form("crossfade"),
+    transition_duration: float = Form(0.4)
 ):
     """ワンクリック動画生成（全工程を自動実行・非同期処理）"""
     if job_id not in jobs_db:
@@ -1039,6 +1049,19 @@ async def generate_video_complete(
             status_code=409, 
             detail="このジョブは既に処理中です"
         )
+    
+    # BGMと転場設定をメタデータに保存
+    metadata_path = Path.cwd() / "data" / job_id / "video_settings.json"
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    video_settings = {
+        "bgm_enabled": bgm_enabled,
+        "bgm_path": bgm_path,
+        "bgm_volume": bgm_volume,
+        "transition_type": transition_type,
+        "transition_duration": transition_duration
+    }
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(video_settings, f, ensure_ascii=False, indent=2)
     
     # ステータス更新（エラー状態をリセットして再試行を開始）
     job.status = "processing"
@@ -1116,7 +1139,15 @@ async def generate_audio_task(
         job.updated_at = datetime.now()
 
 
-async def create_video_task(job_id: str, slide_numbers: Optional[List[int]]):
+async def create_video_task(
+    job_id: str, 
+    slide_numbers: Optional[List[int]],
+    bgm_enabled: bool = False,
+    bgm_path: Optional[str] = None,
+    bgm_volume: float = 0.15,
+    transition_type: str = "crossfade",
+    transition_duration: float = 0.4
+):
     """動画を作成"""
     from api.core.video_creator import VideoCreator
     
@@ -1126,7 +1157,14 @@ async def create_video_task(job_id: str, slide_numbers: Optional[List[int]]):
         
         # 動画作成
         creator = VideoCreator(job_id, Path.cwd())
-        video_path = creator.create_video(slide_numbers)
+        video_path = creator.create_video(
+            slide_numbers,
+            bgm_enabled=bgm_enabled,
+            bgm_path=bgm_path,
+            bgm_volume=bgm_volume,
+            transition_type=transition_type,
+            transition_duration=transition_duration
+        )
         
         job.status = "completed"
         job.status_code = StatusCode.COMPLETED

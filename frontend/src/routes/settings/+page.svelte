@@ -170,7 +170,16 @@
 	}
 
 	async function updateDefaultProvider(providerId: string) {
+		// 先更新UI状态，避免页面闪烁
 		selectedProviderId = providerId;
+		if (settings) {
+			settings.default_provider = providerId;
+		}
+		
+		// 保存到localStorage
+		setDefaultProvider(providerId);
+		
+		// 异步更新服务器设置（不等待完成，避免阻塞UI）
 		try {
 			const response = await fetch('/api/settings', {
 				method: 'PUT',
@@ -182,13 +191,15 @@
 				})
 			});
 
-			if (response.ok) {
+			if (!response.ok) {
+				console.error('デフォルトプロバイダーの更新に失敗しました');
+				// 失败时重新加载设置以恢复状态
 				await loadSettings();
-			} else {
-				alert('デフォルトプロバイダーの更新に失敗しました');
 			}
 		} catch (error) {
 			console.error('デフォルトプロバイダーの更新中にエラーが発生しました:', error);
+			// 错误时重新加载设置以恢复状态
+			await loadSettings();
 		}
 	}
 
@@ -247,8 +258,11 @@
 								type="radio"
 								name="default_provider"
 								value={provider.id}
-								checked={settings.default_provider === provider.id}
-								on:change={() => updateDefaultProvider(provider.id)}
+								checked={selectedProviderId === provider.id || settings.default_provider === provider.id}
+								on:change={(e) => {
+									e.preventDefault();
+									updateDefaultProvider(provider.id);
+								}}
 							/>
 							<div class="provider-info">
 								<h2>{provider.name}</h2>

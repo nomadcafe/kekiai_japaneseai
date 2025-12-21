@@ -174,14 +174,41 @@ class JobProcessor:
         """動画作成の同期版（ワーカーで実行される）"""
         try:
             from api.core.video_creator import VideoCreator
+            import json
             
             job = jobs_db[job_id]
             job.status_code = StatusCode.VIDEO_CREATING
             job.progress = 90
             job.updated_at = datetime.now()
             
+            # 動画設定を読み込み（存在する場合）
+            video_settings_path = Path.cwd() / "data" / job_id / "video_settings.json"
+            bgm_enabled = False
+            bgm_path = None
+            bgm_volume = 0.15
+            transition_type = "crossfade"
+            transition_duration = 0.4
+            
+            if video_settings_path.exists():
+                try:
+                    with open(video_settings_path, 'r', encoding='utf-8') as f:
+                        video_settings = json.load(f)
+                        bgm_enabled = video_settings.get("bgm_enabled", False)
+                        bgm_path = video_settings.get("bgm_path")
+                        bgm_volume = video_settings.get("bgm_volume", 0.15)
+                        transition_type = video_settings.get("transition_type", "crossfade")
+                        transition_duration = video_settings.get("transition_duration", 0.4)
+                except Exception as e:
+                    logger.warning(f"動画設定の読み込みエラー: {e}")
+            
             creator = VideoCreator(job_id, Path.cwd())
-            video_path = creator.create_video()
+            video_path = creator.create_video(
+                bgm_enabled=bgm_enabled,
+                bgm_path=bgm_path,
+                bgm_volume=bgm_volume,
+                transition_type=transition_type,
+                transition_duration=transition_duration
+            )
             
             job.status = "completed"
             job.status_code = StatusCode.COMPLETED

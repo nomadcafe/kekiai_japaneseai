@@ -58,7 +58,7 @@ class SettingsManager:
             "default_provider": os.getenv("USE_MODEL", "openai"),
             "default_model": {
                 "openai": os.getenv("OPENAI_MODEL", "gpt-5.2"),
-                "claude": os.getenv("CLAUDE_MODEL", "claude-3-opus-20240229"),
+                "claude": os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5"),
                 "gemini": os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp"),
                 "deepseek": os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
             },

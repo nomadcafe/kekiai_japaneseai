@@ -136,7 +136,15 @@ class DialogueVideoCreator:
         
         return image_clip
     
-    def create_dialogue_video(self, image_paths, dialogue_audio_info, output_path="dialogue_output.mp4", fps=24):
+    def create_dialogue_video(
+        self, 
+        image_paths, 
+        dialogue_audio_info, 
+        output_path="dialogue_output.mp4", 
+        fps=24,
+        transition_type: str = "crossfade",
+        transition_duration: float = 0.4
+    ):
         """対話形式の動画を作成"""
         clips = []
         
@@ -152,10 +160,25 @@ class DialogueVideoCreator:
             clip = self.create_dialogue_slide(image_path, audio_infos)
             clips.append(clip)
         
-        # すべてのクリップを連結（スライド間をクロスフェード）
-        print(f"動画を連結中... 合計 {len(clips)} クリップ")
+        # すべてのクリップを連結（指定された転場効果を使用）
+        print(f"動画を連結中... 合計 {len(clips)} クリップ, 転場タイプ: {transition_type}")
         print(f"dialogue_audio_info のキー: {list(dialogue_audio_info.keys())}")
-        final_video = self._concatenate_with_crossfade(clips, crossfade_duration=0.4)
+        
+        if transition_type == "none":
+            # 転場なし
+            final_video = concatenate_videoclips(clips, method="compose")
+        elif transition_type == "crossfade":
+            final_video = self._concatenate_with_crossfade(clips, crossfade_duration=transition_duration)
+        elif transition_type == "slide":
+            final_video = self._concatenate_with_slide(clips, transition_duration=transition_duration)
+        elif transition_type == "zoom":
+            final_video = self._concatenate_with_zoom(clips, transition_duration=transition_duration)
+        elif transition_type == "fade":
+            final_video = self._concatenate_with_fade(clips, transition_duration=transition_duration)
+        else:
+            # デフォルトはクロスフェード
+            final_video = self._concatenate_with_crossfade(clips, crossfade_duration=transition_duration)
+        
         print(f"最終動画の長さ: {final_video.duration} 秒")
 
         # オプション：背景BGMをミックス
@@ -243,6 +266,129 @@ class DialogueVideoCreator:
             timeline_clips.append(placed)
             prev_clip = clip
 
+        final = CompositeVideoClip(timeline_clips)
+        final.duration = current_time
+        return final
+
+    def _concatenate_with_slide(self, clips, transition_duration: float = 0.5):
+        """スライド転場：次のスライドが横からスライドイン"""
+        if not clips:
+            raise ValueError("連結するクリップが存在しません")
+        
+        if len(clips) == 1:
+            return clips[0]
+        
+        timeline_clips = []
+        prev_clip = clips[0]
+        timeline_clips.append(prev_clip.set_start(0))
+        current_time = prev_clip.duration
+        
+        for idx in range(1, len(clips)):
+            clip = clips[idx]
+            safe_dur = min(transition_duration, prev_clip.duration * 0.3, clip.duration * 0.3)
+            
+            if safe_dur <= 0:
+                placed = clip.set_start(current_time)
+                current_time += clip.duration
+            else:
+                # 前のクリップを左にスライドアウト、新しいクリップを右からスライドイン
+                from moviepy.video.fx.all import resize
+                
+                # 前のクリップの終了時に左に移動
+                prev_end = prev_clip.set_start(current_time - safe_dur).set_position(lambda t: (-clip.w * (t / safe_dur) if t < safe_dur else -clip.w, 'center'))
+                
+                # 新しいクリップを右からスライドイン
+                start_time = current_time - safe_dur
+                new_clip = clip.set_start(start_time).set_position(lambda t: (clip.w * (1 - t / safe_dur) if t < safe_dur else 0, 'center'))
+                
+                timeline_clips.append(new_clip)
+                current_time = start_time + clip.duration
+            
+            prev_clip = clip
+        
+        final = CompositeVideoClip(timeline_clips)
+        final.duration = current_time
+        return final
+
+    def _concatenate_with_zoom(self, clips, transition_duration: float = 0.5):
+        """ズーム転場：次のスライドがズームイン"""
+        if not clips:
+            raise ValueError("連結するクリップが存在しません")
+        
+        if len(clips) == 1:
+            return clips[0]
+        
+        timeline_clips = []
+        prev_clip = clips[0]
+        timeline_clips.append(prev_clip.set_start(0))
+        current_time = prev_clip.duration
+        
+        for idx in range(1, len(clips)):
+            clip = clips[idx]
+            safe_dur = min(transition_duration, prev_clip.duration * 0.3, clip.duration * 0.3)
+            
+            if safe_dur <= 0:
+                placed = clip.set_start(current_time)
+                current_time += clip.duration
+            else:
+                # 前のクリップをズームアウト、新しいクリップをズームイン
+                from moviepy.video.fx.all import resize
+                
+                # 前のクリップの終了時にズームアウト
+                prev_end = prev_clip.set_start(current_time - safe_dur).fx(
+                    resize, lambda t: 1.0 + (t / safe_dur) * 0.2
+                )
+                
+                # 新しいクリップをズームイン
+                start_time = current_time - safe_dur
+                new_clip = clip.set_start(start_time).fx(
+                    resize, lambda t: 1.2 - (t / safe_dur) * 0.2 if t < safe_dur else 1.0
+                )
+                
+                timeline_clips.append(new_clip)
+                current_time = start_time + clip.duration
+            
+            prev_clip = clip
+        
+        final = CompositeVideoClip(timeline_clips)
+        final.duration = current_time
+        return final
+
+    def _concatenate_with_fade(self, clips, transition_duration: float = 0.5):
+        """フェード転場：前のスライドがフェードアウト、次のスライドがフェードイン"""
+        if not clips:
+            raise ValueError("連結するクリップが存在しません")
+        
+        if len(clips) == 1:
+            return clips[0]
+        
+        timeline_clips = []
+        prev_clip = clips[0]
+        timeline_clips.append(prev_clip.set_start(0))
+        current_time = prev_clip.duration
+        
+        for idx in range(1, len(clips)):
+            clip = clips[idx]
+            safe_dur = min(transition_duration, prev_clip.duration * 0.3, clip.duration * 0.3)
+            
+            if safe_dur <= 0:
+                placed = clip.set_start(current_time)
+                current_time += clip.duration
+            else:
+                # 前のクリップをフェードアウト
+                from moviepy.video.fx.fadeout import fadeout
+                prev_end = fadeout(prev_clip, safe_dur).set_start(current_time - safe_dur)
+                
+                # 新しいクリップをフェードイン
+                from moviepy.video.fx.fadein import fadein
+                start_time = current_time - safe_dur
+                new_clip = fadein(clip, safe_dur).set_start(start_time)
+                
+                timeline_clips.append(new_clip)
+                current_time = start_time + clip.duration
+            
+            prev_clip = clip
+        
         final = CompositeVideoClip(timeline_clips)
         final.duration = current_time
         return final

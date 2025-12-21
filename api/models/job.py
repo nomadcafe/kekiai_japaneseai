@@ -38,6 +38,13 @@ class CreateVideoRequest(BaseModel):
     """動画作成リクエスト"""
     job_id: str
     slide_numbers: Optional[list[int]] = None  # 指定しない場合は全スライド
+    # BGM設定
+    bgm_enabled: bool = False  # BGMを有効にするか
+    bgm_path: Optional[str] = None  # BGMファイルパス（相対パスまたはファイル名）
+    bgm_volume: float = 0.15  # BGM音量（0.0-1.0）
+    # 転場効果設定
+    transition_type: str = "crossfade"  # 転場タイプ: "crossfade", "slide", "zoom", "fade", "none"
+    transition_duration: float = 0.4  # 転場時間（秒）
 
 
 class GenerateDialogueRequest(BaseModel):

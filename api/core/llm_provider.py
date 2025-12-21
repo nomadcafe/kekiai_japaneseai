@@ -95,7 +95,7 @@ class ClaudeAdapter(LLMInterface):
             self.client = anthropic.Anthropic(
                 api_key=config.api_key or os.getenv("ANTHROPIC_API_KEY")
             )
-            self.model = config.model_id or "claude-3-opus-20240229"
+            self.model = config.model_id or "claude-sonnet-4-5"
         except ImportError:
             self.client = None
     
@@ -276,7 +276,11 @@ class LLMFactory:
             providers.append({
                 "id": LLMProvider.CLAUDE,
                 "name": "Claude (Anthropic)",
-                "models": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
+                "models": [
+                    "claude-sonnet-4-5",           # Claude Sonnet 4.5 (最新、推奨 - 2025年9月)
+                    "claude-haiku-4-5",            # Claude Haiku 4.5 (高速版 - 2025年10月)
+                    "claude-opus-4-5"              # Claude Opus 4.5 (最高性能 - 2025年11月)
+                ],
                 "requires_key": True,
                 "available": adapter.is_available()
             })
