@@ -19,9 +19,14 @@ app = FastAPI(
 async def startup_event():
     """アプリケーション起動時の処理"""
     from api.core.settings_manager import SettingsManager
+    from api.database.db import init_db
+    
     # SettingsManagerを初期化することで.envファイルのチェックとコピーが実行される
     settings = SettingsManager()
     print("設定マネージャーを初期化しました")
+    
+    # データベースを初期化
+    init_db()
 
 # CORS設定（開発用）
 app.add_middleware(

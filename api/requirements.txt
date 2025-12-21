@@ -19,3 +19,5 @@ moviepy==1.0.3
 pillow>=9.5.0
 requests>=2.31.0
 noisereduce>=3.0.0
+sqlalchemy>=2.0.0
+alembic>=1.12.0

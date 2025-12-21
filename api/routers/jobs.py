@@ -25,9 +25,74 @@ from api.core.job_processor import JobProcessor
 from api.core.async_worker import async_worker
 from api.core.knowledge_extractor import extract_text_from_knowledge_file
 
-# グローバル変数（後でデータベースに置き換え）
-# TODO: データベース統合時に削除
-jobs_db = {}
+# データベースサービスをインポート
+from api.database.job_service import JobService
+
+# 後方互換性のため、jobs_db を辞書としてアクセス可能にする（非推奨）
+# 新しいコードでは JobService を使用すること
+class JobsDBDict:
+    """jobs_db の後方互換性ラッパー（非推奨）"""
+    def __getitem__(self, key: str):
+        job = JobService.get_job(key)
+        if job:
+            # JobStatus オブジェクトを返す（既存コードとの互換性）
+            from api.models.job import JobStatus
+            return JobStatus(**job.to_dict())
+        raise KeyError(key)
+    
+    def __setitem__(self, key: str, value):
+        # JobStatus オブジェクトから Job を作成または更新
+        from api.models.job import JobStatus
+        if isinstance(value, JobStatus):
+            # 既存のジョブを更新
+            JobService.update_job_from_status(value)
+        elif isinstance(value, dict):
+            # 辞書の場合、既存のジョブを更新または新規作成
+            existing_job = JobService.get_job(key)
+            if existing_job:
+                JobService.update_job(
+                    job_id=key,
+                    status=value.get("status"),
+                    status_code=value.get("status_code"),
+                    progress=value.get("progress"),
+                    result_url=value.get("result_url"),
+                    error_code=value.get("error_code"),
+                    estimated_duration=value.get("estimated_duration")
+                )
+            else:
+                JobService.create_job(
+                    job_id=key,
+                    status=value.get("status", "pending"),
+                    status_code=value.get("status_code", "PENDING"),
+                    target_duration=value.get("target_duration")
+                )
+    
+    def __delitem__(self, key: str):
+        JobService.delete_job(key)
+    
+    def __contains__(self, key: str) -> bool:
+        return JobService.job_exists(key)
+    
+    def get(self, key: str, default=None):
+        job = JobService.get_job(key)
+        if job:
+            from api.models.job import JobStatus
+            return JobStatus(**job.to_dict())
+        return default
+    
+    def values(self):
+        jobs = JobService.list_jobs()
+        from api.models.job import JobStatus
+        return [JobStatus(**job.to_dict()) for job in jobs]
+    
+    def __len__(self):
+        return len(JobService.list_jobs())
+    
+    def keys(self):
+        jobs = JobService.list_jobs()
+        return [job.job_id for job in jobs]
+
+jobs_db = JobsDBDict()  # 後方互換性のため
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("output")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -101,19 +166,7 @@ async def upload_pdf(
             print(f"ナレッジファイルの処理エラー: {e}")
             knowledge_text = ""
     
-    # ジョブ情報を保存
-    job_status = JobStatus(
-        job_id=job_id,
-        status="pending",
-        status_code=StatusCode.PDF_UPLOADING,
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
-        progress=0,
-        target_duration=target_duration
-    )
-    jobs_db[job_id] = job_status
-    
-    # メタデータを保存（目安時間とキャラクター設定）
+    # ジョブ情報をデータベースに保存
     metadata = {
         "target_duration": target_duration,
         "speaker1": {"id": speaker1_id, "name": speaker1_name, "speed": speaker1_speed},
@@ -124,6 +177,27 @@ async def upload_pdf(
         "api_key": api_key,  # APIキーをメタデータに保存
         "provider": provider  # プロバイダーをメタデータに保存
     }
+    
+    JobService.create_job(
+        job_id=job_id,
+        status="pending",
+        status_code=StatusCode.PDF_UPLOADING,
+        target_duration=target_duration,
+        metadata=metadata
+    )
+    
+    # 後方互換性のため、jobs_db にも設定（非推奨）
+    job_status = JobStatus(
+        job_id=job_id,
+        status="pending",
+        status_code=StatusCode.PDF_UPLOADING,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        progress=0,
+        target_duration=target_duration
+    )
+    
+    # メタデータをファイルにも保存（後方互換性のため）
     metadata_file = job_dir / "metadata.json"
     with open(metadata_file, "w", encoding="utf-8") as f:
         json.dump(metadata, f, ensure_ascii=False, indent=2)
