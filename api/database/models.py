@@ -43,3 +43,5 @@ class Job(Base):
             "target_duration": self.target_duration
         }
 
+
+

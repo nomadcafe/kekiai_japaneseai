@@ -768,6 +768,28 @@ async def get_slide_image(job_id: str, slide_number: int):
     )
 
 
+@router.get("/{job_id}/audio/{filename:path}")
+async def get_audio_file(job_id: str, filename: str):
+    """音声ファイルを取得"""
+    audio_path = Path.cwd() / "audio" / job_id / filename
+    
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="音声ファイルが見つかりません")
+    
+    # セキュリティチェック：job_idがパスに含まれていることを確認
+    if job_id not in str(audio_path):
+        raise HTTPException(status_code=403, detail="アクセスが拒否されました")
+    
+    return FileResponse(
+        path=audio_path,
+        media_type="audio/wav",
+        headers={
+            "Accept-Ranges": "bytes",
+            "Content-Disposition": f'inline; filename="{filename}"'
+        }
+    )
+
+
 @router.get("/{job_id}/dialogue")
 async def get_dialogue(job_id: str):
     """生成された対話スクリプトを取得"""

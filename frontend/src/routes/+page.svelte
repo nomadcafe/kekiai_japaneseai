@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { authenticatedFetch, getApiKey, getDefaultProvider } from "$lib/auth.ts";
   import { t } from "$lib/i18n/index.js";
+  import TimelineEditor from "$lib/TimelineEditor.svelte";
   // getApiUrl は削除されました - 直接URLパスを使用
 
   interface Job {
@@ -43,6 +44,7 @@
   let editingDialogue = false;
   let additionalPrompt = "";
   let currentStep: "upload" | "dialogue" | "video" = "upload";
+  let viewMode: "list" | "timeline" = "list"; // 表示モード: リスト or タイムライン
   let slides: Slide[] = [];
   let isRegenerating = false;
   let instructionHistory: any = {};
@@ -1521,6 +1523,22 @@
       </div>
 
       <div class="edit-controls">
+        <div class="view-mode-toggle">
+          <button
+            class="view-btn {viewMode === 'list' ? 'active' : ''}"
+            on:click={() => viewMode = 'list'}
+            title="リスト表示"
+          >
+            📋 リスト
+          </button>
+          <button
+            class="view-btn {viewMode === 'timeline' ? 'active' : ''}"
+            on:click={() => viewMode = 'timeline'}
+            title="タイムライン表示"
+          >
+            ⏱️ タイムライン
+          </button>
+        </div>
         <button
           class="edit-btn"
           on:click={async () => {
@@ -1535,6 +1553,20 @@
         </button>
       </div>
 
+      {#if viewMode === 'timeline' && dialogueData}
+        <TimelineEditor
+          {dialogueData}
+          {slides}
+          {currentJobMetadata}
+          jobId={currentJob?.job_id || null}
+          onUpdate={(updatedData) => {
+            dialogueData = updatedData;
+            if (currentJob) {
+              updateDialogue(currentJob.job_id);
+            }
+          }}
+        />
+      {:else}
       <div class="dialogue-list">
         {#each Object.entries(dialogueData) as [slideKey, dialogues]}
           {@const slideNum = parseInt(slideKey.split("_")[1])}
@@ -1659,6 +1691,7 @@
           </div>
         {/each}
       </div>
+      {/if}
     </section>
   {:else if currentJob && (isUploading || currentJob.status === "processing" || currentJob.status === "generating_dialogue" || currentStep === "video" || (currentStep === "dialogue" && !dialogueData))}
     <section class="progress-section">
@@ -2103,6 +2136,43 @@
     display: flex;
     gap: 1rem;
     margin-bottom: 2rem;
+  }
+
+  .edit-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    gap: 1rem;
+  }
+
+  .view-mode-toggle {
+    display: flex;
+    gap: 0.5rem;
+    background-color: #f3f4f6;
+    padding: 4px;
+    border-radius: 8px;
+  }
+
+  .view-btn {
+    background-color: transparent;
+    color: #6b7280;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.875rem;
+  }
+
+  .view-btn:hover {
+    background-color: #e5e7eb;
+    color: #374151;
+  }
+
+  .view-btn.active {
+    background-color: #3b82f6;
+    color: white;
   }
 
   .edit-btn {
